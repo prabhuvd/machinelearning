@@ -14,6 +14,7 @@ import time
 import neat
 import math
 from colors import Color
+
 # import visualize
 import pickle
 pygame.font.init()  # init font
@@ -40,6 +41,85 @@ GAME_OVER= False
 GAME_MAIN_LOOP = True
 DELAYED_START = True
 CLOCK = 0
+
+class Pipe():
+    """
+    represents a pipe object
+    """
+    GAP = 250
+    VEL = 5
+
+    def __init__(self, x):
+        """
+        initialize pipe object
+        :param x: int
+        :param y: int
+        :return" None
+        """
+        self.x = x
+        self.height = 0
+
+        # where the top and bottom of the pipe is
+        self.top = 0
+        self.bottom = 0
+
+        self.PIPE_TOP = pygame.transform.flip(pipe_img, False, True)
+        self.PIPE_BOTTOM = pipe_img
+
+        self.passed = False
+
+        self.set_height()
+
+    def set_height(self):
+        """
+        set the height of the pipe, from the top of the screen
+        :return: None
+        """
+        self.height = random.randrange(50, 450)
+        self.top = self.height - self.PIPE_TOP.get_height()
+        self.bottom = self.height + self.GAP
+
+    def move(self):
+        """
+        move pipe based on vel
+        :return: None
+        """
+        self.x -= self.VEL
+
+
+    def draw(self, win):
+        """
+        draw both the top and bottom of the pipe
+        :param GAME_WINDOW: pygame window/surface
+        :return: None
+        """
+        #print ("pipes : " , self.x, self.top,self.bottom)
+        # draw top
+        win.blit(self.PIPE_TOP, (self.x, self.top))
+        # draw bottom
+        win.blit(self.PIPE_BOTTOM, (self.x, self.bottom))
+
+
+    def collide(self, bird):
+        """
+        returns if a point is colliding with the pipe
+        :param bird: Bird object
+        :return: Bool
+        """
+        bird_mask = bird.get_mask()
+        top_mask = pygame.mask.from_surface(self.PIPE_TOP)
+        bottom_mask = pygame.mask.from_surface(self.PIPE_BOTTOM)
+        top_offset = (self.x - bird.x, int(self.top - round(bird.y)))
+        bottom_offset = (self.x - bird.x, int(self.bottom - round(bird.y)))
+
+
+        b_point = bird_mask.overlap(bottom_mask, bottom_offset)
+        t_point = bird_mask.overlap(top_mask,top_offset)
+
+        if b_point or t_point:
+            return True
+        else :
+            return False
 
 class Bird:
     """
@@ -139,84 +219,6 @@ class Bird:
         return pygame.mask.from_surface(self.img)
 
 
-class Pipe():
-    """
-    represents a pipe object
-    """
-    GAP = 250
-    VEL = 5
-
-    def __init__(self, x):
-        """
-        initialize pipe object
-        :param x: int
-        :param y: int
-        :return" None
-        """
-        self.x = x
-        self.height = 0
-
-        # where the top and bottom of the pipe is
-        self.top = 0
-        self.bottom = 0
-
-        self.PIPE_TOP = pygame.transform.flip(pipe_img, False, True)
-        self.PIPE_BOTTOM = pipe_img
-
-        self.passed = False
-
-        self.set_height()
-
-    def set_height(self):
-        """
-        set the height of the pipe, from the top of the screen
-        :return: None
-        """
-        self.height = random.randrange(50, 450)
-        self.top = self.height - self.PIPE_TOP.get_height()
-        self.bottom = self.height + self.GAP
-
-    def move(self):
-        """
-        move pipe based on vel
-        :return: None
-        """
-        self.x -= self.VEL
-
-
-    def draw(self, win):
-        """
-        draw both the top and bottom of the pipe
-        :param GAME_WINDOW: pygame window/surface
-        :return: None
-        """
-        #print ("pipes : " , self.x, self.top,self.bottom)
-        # draw top
-        win.blit(self.PIPE_TOP, (self.x, self.top))
-        # draw bottom
-        win.blit(self.PIPE_BOTTOM, (self.x, self.bottom))
-
-
-    def collide(self, bird):
-        """
-        returns if a point is colliding with the pipe
-        :param bird: Bird object
-        :return: Bool
-        """
-        bird_mask = bird.get_mask()
-        top_mask = pygame.mask.from_surface(self.PIPE_TOP)
-        bottom_mask = pygame.mask.from_surface(self.PIPE_BOTTOM)
-        top_offset = (self.x - bird.x, int(self.top - round(bird.y)))
-        bottom_offset = (self.x - bird.x, int(self.bottom - round(bird.y)))
-
-
-        b_point = bird_mask.overlap(bottom_mask, bottom_offset)
-        t_point = bird_mask.overlap(top_mask,top_offset)
-
-        if b_point or t_point:
-            return True
-        else :
-            return False
 
 class Base:
     """
@@ -309,7 +311,7 @@ def draw_window(win, birds, pipes, base,line1,line2):
     #NEAT ADDITION : draw birds instead of 1 bird
     for bird in birds:
         bird.draw(win)
- 
+
     pygame.draw.line(win,Color.BLUE,(line1[0]),(line1[1]),2)
     pygame.draw.line(win,Color.BLUE,(line2[0]),(line2[1]),2)
 
@@ -426,6 +428,12 @@ def calculateDistance(x1,y1,x2,y2):
      dist = math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
      return dist
 
+def pickle_learning(learned_obj):
+    import pickle
+    pickling_on = open("flappy_learned.pickle","wb")
+    pickle.dump(learned_obj, pickling_on)
+    pickling_on.close()
+
 def main(genomes,config):
     global GAME_MAIN_LOOP
     global GAME_WINDOW
@@ -448,9 +456,8 @@ def main(genomes,config):
 
     flappy_score = Score()
 
-
+    base= Base(FLOOR)
     bird = Bird(230,350)
-    base= Base(720)
     pipes = [Pipe(600)]
 
     GAME_WINDOW = pygame.display.set_mode((WIN_WIDTH,WIN_HEIGHT))
@@ -463,7 +470,7 @@ def main(genomes,config):
 
         CLOCK.tick(30)
         # Keep the base GAME_MAIN_LOOPning
-        base.move()
+
         # for x , bird in enumerate(birds):
         #     bird.move()
         #     ge[x].fitness+=0.1
@@ -474,6 +481,9 @@ def main(genomes,config):
         #For NEAT , there is no keyboard input
         #handle_space_bar(bird)
         hande_quit_event()
+
+        base.move()
+
         # If no birds are left , break
         if len(birds) <=0:
             GAME_MAIN_LOOP = False
@@ -495,6 +505,9 @@ def main(genomes,config):
                     pipes.pop()
                     pipes.append(Pipe(WIN_WIDTH))
                     flappy_score.incr_score()
+                    if(flappy_score.get_score()>100):
+                        print("Pickle the data !! ")
+
                     # NEAT ADDITION : Add to the fittness if the birds passes the pipe
                     for  g in ge:
                         g.fitness +=5
@@ -535,7 +548,8 @@ def run(config_file):
     #p.add_reporter(neat.Checkpointer(5))
 
     # Run for up to 50 generations.
-    winner = p.run(main, 50)
+    winner = p.run(main, 5)
+    pickle_learning(winner)
 
     # show final stats
     print('\nBest genome:\n{!s}'.format(winner))
