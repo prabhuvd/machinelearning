@@ -1,16 +1,19 @@
 """
 The classic game of flappy bird. Make with python
-and pygame.  The base file were borrowed from Tech With Time
+and pygame. Features pixel perfect collision using masks :o
 
-Author : Prabhu Desai
-
+Date Modified:  Jul 30, 2019
+Author: Tech With Tim
+Estimated Work Time: 5 hours (1 just for that damn collision)
 """
 import pygame
 import random
 from random import randint
 import os
 import time
-# import neat
+import neat
+import math
+from colors import Color
 # import visualize
 import pickle
 pygame.font.init()  # init font
@@ -140,7 +143,7 @@ class Pipe():
     """
     represents a pipe object
     """
-    GAP = 350
+    GAP = 250
     VEL = 5
 
     def __init__(self, x):
@@ -285,7 +288,7 @@ def blitRotateCenter(surf, image, topleft, angle):
 
     surf.blit(rotated_image, new_rect.topleft)
 
-def draw_window(win, birds, pipes, base):
+def draw_window(win, birds, pipes, base,line1,line2):
     """
     draws the windows for the main game loop
     :param GAME_WINDOW: pygame window surface
@@ -300,10 +303,15 @@ def draw_window(win, birds, pipes, base):
     win.blit(bg_img, (0,0))
 
     for pipe in pipes:
-        pipe.draw(GAME_WINDOW)
+        pipe.draw(win)
 
-    base.draw(GAME_WINDOW)
-    birds.draw(GAME_WINDOW)
+    base.draw(win)
+    #NEAT ADDITION : draw birds instead of 1 bird
+    for bird in birds:
+        bird.draw(win)
+ 
+    pygame.draw.line(win,Color.BLUE,(line1[0]),(line1[1]),2)
+    pygame.draw.line(win,Color.BLUE,(line2[0]),(line2[1]),2)
 
     # for bird in birds:
     #     # draw lines from bird to pipe
@@ -380,6 +388,15 @@ def handle_space_bar(bird_obj):
             if event.key == pygame.K_SPACE:
                 bird_obj.jump()
 
+def hande_quit_event():
+    global GAME_MAIN_LOOP
+    #Respond to space-bar for the bird jump
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            GAME_MAIN_LOOP = False
+            pygame.quit()
+            quit()
+
 
 def startDelaynScore(score):
     global DELAYED_START
@@ -404,68 +421,125 @@ def startDelaynScore(score):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 GAME_MAIN_LOOP = False
-def main():
+
+def calculateDistance(x1,y1,x2,y2):
+     dist = math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+     return dist
+
+def main(genomes,config):
     global GAME_MAIN_LOOP
     global GAME_WINDOW
     global GAME_OVER
     global CLOCK
 
+    # NEAT ADDITION : create nets ,birds and ge
+    nets=[]
+    ge =[]
+    birds =[]
+
+    # NEAT ADDITION :  create nets ,birds and ge
+    for _,g in genomes:
+        net = neat.nn.FeedForwardNetwork.create(g,config)
+        nets.append(net)
+        birds.append(Bird(230,350))
+        g.fitness=0
+        ge.append(g)
+
+
     flappy_score = Score()
 
 
     bird = Bird(230,350)
-    base= Base(700)
+    base= Base(720)
     pipes = [Pipe(600)]
 
     GAME_WINDOW = pygame.display.set_mode((WIN_WIDTH,WIN_HEIGHT))
     CLOCK = pygame.time.Clock()
     score=0
     while GAME_MAIN_LOOP:
-        startDelaynScore(flappy_score)
-        checkGameOver(flappy_score)
+        #startDelaynScore(flappy_score)
+        #checkGameOver(flappy_score)
         flappy_score.update_screen(GAME_WINDOW)
 
         CLOCK.tick(30)
         # Keep the base GAME_MAIN_LOOPning
         base.move()
-        bird.move()
-        handle_space_bar(bird)
-
-        #check if the bird has a collision with the base
-        if(base.collide(bird)):
-            GAME_OVER = True
+        # for x , bird in enumerate(birds):
+        #     bird.move()
+        #     ge[x].fitness+=0.1
+        #
+        #     output = nets[x].activate(bird.y,abs(bird.y-pipe.height,abs(bird.y-pipe.bottom)))
+        #     if(output[0]>0.5):
+        #         bird.jump()
+        #For NEAT , there is no keyboard input
+        #handle_space_bar(bird)
+        hande_quit_event()
+        # If no birds are left , break
+        if len(birds) <=0:
+            GAME_MAIN_LOOP = False
+            break
 
         #Index through pipes that are not required anymore and add new pipes..
         for pipe in pipes:
-            if(pipe.x <=0 ):
-                pipes.pop()
-                pipes.append(Pipe(WIN_WIDTH))
-                flappy_score.incr_score()
+            for x, bird in enumerate(birds):
+                bird.move()
+                ge[x].fitness+=0.1
 
-            if(pipe.collide(bird)):
-                GAME_OVER = True
+                output = nets[x].activate((bird.y,calculateDistance(bird.x,bird.y,pipe.x,pipe.height),calculateDistance(bird.x,bird.y,pipe.x,pipe.bottom)))
 
+                if(output[0]>0.5):
+                    bird.jump()
+
+                #create new pipe once the initial pipe pans out of the screen
+                if(pipe.x <=0 ):
+                    pipes.pop()
+                    pipes.append(Pipe(WIN_WIDTH))
+                    flappy_score.incr_score()
+                    # NEAT ADDITION : Add to the fittness if the birds passes the pipe
+                    for  g in ge:
+                        g.fitness +=5
+
+                #Detect collision of the bird with pipe
+                if(pipe.collide(bird) or base.collide(bird)):
+                    # NEAT ADDITION : remove birds, nets and ge and reduce finess on collision
+                    ge[x].fitness -=1
+                    birds.pop(x)
+                    nets.pop(x)
+                    ge.pop(x)
+                    # GAME_OVER = True
             pipe.move()
 
-        draw_window(GAME_WINDOW,bird,pipes,base)
+        draw_window(GAME_WINDOW,birds,pipes,base,((bird.x,bird.y),(pipe.x,pipe.height)),((bird.x,bird.y),(pipe.x,pipe.bottom)))
 
 
+#NEAT ADDITION  : Remove call to main
+#main()
 
-    pygame.quit()
-    quit()
+def run(config_file):
+    """
+    runs the NEAT algorithm to train a neural network to play flappy bird.
+    :param config_file: location of config file
+    :return: None
+    """
+    config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction,
+                         neat.DefaultSpeciesSet, neat.DefaultStagnation,
+                         config_file)
 
-
-main()
-
-def run(config_path):
-    config = neat.config.Config(neat.DefaultGenome,neat.DefaultReproduction,
-                            neat.DefaultSpeciesSet,neat.DefaultStagnation,config_path)
-
+    # Create the population, which is the top-level object for a NEAT run.
     p = neat.Population(config)
+
+    # Add a stdout reporter to show progress in the terminal.
     p.add_reporter(neat.StdOutReporter(True))
     stats = neat.StatisticsReporter()
     p.add_reporter(stats)
-    winner = p.run(,50)
+    #p.add_reporter(neat.Checkpointer(5))
+
+    # Run for up to 50 generations.
+    winner = p.run(main, 50)
+
+    # show final stats
+    print('\nBest genome:\n{!s}'.format(winner))
+
 
 if __name__  == "__main__":
     local_dir= os.path.dirname(__file__)
