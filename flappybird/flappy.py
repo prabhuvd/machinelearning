@@ -457,6 +457,7 @@ def main():
 
 
 main()
+
 def run(config_path):
     config = neat.config.Config(neat.DefaultGenome,neat.DefaultReproduction,
                             neat.DefaultSpeciesSet,neat.DefaultStagnation,config_path)
